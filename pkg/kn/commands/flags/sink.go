@@ -31,6 +31,9 @@ import (
 
 type SinkFlags struct {
 	sink string
+
+	IncludeOffline bool
+	offline        bool
 }
 
 // AddWithFlagName configures sink flag with given flag name and a short flag name
@@ -60,6 +63,10 @@ func (i *SinkFlags) AddWithFlagName(cmd *cobra.Command, fname, short string) {
 			Version:  p.Version,
 		}
 	}
+
+	if i.IncludeOffline {
+		cmd.Flags().BoolVar(&i.offline, "offline", false, "--offline")
+	}
 }
 
 // Add configures sink flag with name 'sink' amd short name 's'
@@ -78,6 +85,12 @@ var sinkMappings = map[string]schema.GroupVersionResource{
 	"ksvc": {
 		Resource: "services",
 		Group:    "serving.knative.dev",
+		Version:  "v1",
+	},
+	// Shorthand alias for k8s core service
+	"svc": {
+		Resource: "services",
+		Group:    "",
 		Version:  "v1",
 	},
 	"channel": {
@@ -113,6 +126,18 @@ func (i *SinkFlags) ResolveSink(ctx context.Context, knclient clientdynamic.KnDy
 	if ns != "" {
 		namespace = ns
 	}
+
+	if i.offline {
+		return &duckv1.Destination{
+			Ref: &duckv1.KReference{
+				Kind:       typ.Resource[:len(typ.Resource)-1],
+				APIVersion: typ.GroupVersion().String(),
+				Name:       name,
+				Namespace:  namespace,
+			},
+		}, nil
+	}
+
 	obj, err := client.Resource(typ).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		return nil, err
